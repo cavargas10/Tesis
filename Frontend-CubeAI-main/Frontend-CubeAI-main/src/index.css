@@ -1,0 +1,254 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-white dark:bg-[#0f102f];
+  color-scheme: light dark;
+}
+
+body::-webkit-scrollbar {
+  width: 8px; 
+}
+
+body::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, theme('colors.azul-gradient'), theme('colors.morado-gradient'));
+  border-radius: 19px;
+}
+
+body::-webkit-scrollbar-track {
+  background-color: #0f102f;
+}
+
+/* ==========================================================================
+   ESTILOS DE TIPOGRAFÍA PARA DOCUMENTACIÓN (PROSE)
+   ========================================================================== */
+
+/* --- Contenedor Base --- */
+.prose {
+  font-family: theme("fontFamily.sans");
+}
+
+/* --- Párrafos, texto base y enlaces --- */
+.prose p, 
+.prose li, 
+.prose ul, 
+.prose ol {
+  @apply text-slate-700 dark:text-gray-300;
+}
+
+.prose a {
+  @apply text-morado-gradient font-medium no-underline transition-all duration-200 ease-out;
+  @apply relative hover:text-azul-gradient;
+}
+
+/* Excluir los botones de navegación de los estilos de enlace */
+.prose a:not(.nav-button)::after {
+    content: "";
+    @apply absolute left-0 -bottom-0.5 h-[2px] w-0 bg-azul-gradient transition-all duration-300;
+}
+.prose a:not(.nav-button):hover::after {
+    @apply w-full;
+}
+
+/* Asegurar que los botones de navegación no tengan línea inferior */
+.prose .nav-button {
+  @apply relative;
+}
+
+.prose .nav-button::after {
+  display: none !important;
+}
+.prose .nav-button:hover::after {
+  display: none !important;
+}
+.prose a::after {
+    content: "";
+    @apply absolute left-0 -bottom-0.5 h-[2px] w-0 bg-azul-gradient transition-all duration-300;
+}
+.prose a:hover::after {
+    @apply w-full;
+}
+
+.prose strong {
+  @apply font-semibold text-slate-800 dark:text-gray-200;
+}
+
+.prose em {
+  @apply italic text-slate-600 dark:text-gray-400;
+}
+
+/* --- Encabezados --- */
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  @apply font-bold tracking-tight text-slate-900 dark:text-white;
+  letter-spacing: -0.025em;
+}
+
+.prose h1 {
+  @apply text-3xl sm:text-4xl lg:text-5xl mt-12 mb-10 font-extrabold;
+}
+
+.prose h2 {
+  @apply text-3xl sm:text-4xl mt-16 mb-8 font-bold;
+  @apply relative pl-4 border-l-4 border-azul-gradient;
+}
+
+.prose h3 {
+  @apply text-2xl sm:text-3xl mt-12 mb-6 font-bold;
+}
+
+/* --- Listas --- */
+.prose ul,
+.prose ol {
+  @apply my-6 space-y-3;
+}
+.prose ul {
+  @apply list-none pl-0;
+}
+.prose ul > li {
+  @apply pl-8 mb-6 pt-4 border-t relative;
+  @apply border-gray-200 dark:border-linea/20;
+}
+.prose ul > li:first-child {
+  @apply border-t-0 pt-0;
+}
+.prose ul > li::before {
+  content: "●";
+  @apply absolute left-2 top-4 text-azul-gradient text-xl font-bold;
+}
+.prose ul > li:first-child::before {
+  @apply top-0;
+}
+.prose ul > li > strong:first-child {
+  @apply block mb-1 font-semibold text-morado-gradient;
+}
+
+/* --- Código --- */
+.prose pre {
+  @apply p-5 rounded-xl overflow-x-auto my-8 shadow-lg border;
+  @apply bg-slate-100 border-slate-200 dark:bg-[#060718] dark:border-linea/20;
+}
+.dark\:prose pre {
+  box-shadow: 0 0 15px theme("colors.azul-gradient / 20%"), 0 0 30px theme("colors.morado-gradient / 10%");
+}
+.prose pre code {
+  @apply bg-transparent p-0 font-mono text-sm leading-relaxed;
+  @apply text-slate-800 dark:text-gray-300;
+}
+.prose code:not(pre > code) {
+  @apply text-sm font-mono px-2 py-1 rounded-md border;
+  @apply bg-blue-100/50 text-blue-800 border-blue-200/50;
+  @apply dark:bg-principal dark:text-morado-gradient dark:border-linea/40;
+}
+.dark\:prose code:not(pre > code) {
+  box-shadow: 0 0 5px theme("colors.morado-gradient / 20%");
+}
+
+/* --- Imágenes y Figuras --- */
+.prose figure {
+  @apply my-10 p-1 rounded-lg border;
+  @apply bg-gradient-to-br from-slate-200/20 via-white/0 to-slate-200/20;
+  @apply dark:bg-gradient-to-br dark:from-azul-gradient/20 dark:via-principal/0 dark:to-morado-gradient/20;
+  @apply border-slate-200 dark:border-transparent;
+  @apply transition-all duration-300;
+  @apply hover:border-blue-400 dark:hover:border-azul-gradient;
+  @apply hover:shadow-xl;
+  @apply dark:hover:shadow-[0_10px_30px_rgba(51,51,234,0.2),0_0_15px_rgba(51,51,234,0.8),0_0_30px_theme('colors.morado-gradient'/40%)];
+}
+.prose figure img {
+  @apply block max-w-full h-auto rounded-md shadow-xl border-0 m-0;
+}
+.prose img:not(figure > img) {
+  @apply my-10 rounded-lg shadow-xl border-2 transition-all duration-300;
+  @apply border-gray-200 dark:border-linea/20;
+  @apply hover:border-blue-400 dark:hover:border-azul-gradient;
+  @apply hover:shadow-2xl;
+  @apply dark:hover:shadow-[0_10px_30px_rgba(51,51,234,0.2),0_0_15px_rgba(51,51,234,0.8)];
+}
+
+/* --- Citas y Líneas Horizontales --- */
+.prose blockquote {
+  @apply my-8 px-6 py-4 border-0 rounded-lg shadow-md;
+  @apply relative border-l-4;
+  @apply bg-gray-100 border-azul-gradient dark:bg-principal;
+}
+.prose hr {
+  @apply my-12 border-0 h-[2px];
+  @apply bg-gradient-to-r from-transparent via-gray-200 to-transparent;
+  @apply dark:bg-gradient-to-r dark:via-linea/50 dark:to-transparent;
+}
+
+
+/* ==========================================================================
+   OTROS ESTILOS
+   ========================================================================== */
+.MyGradient {
+  mask-image: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0),
+    rgba(0, 0, 0, 1) 20%,
+    rgba(0, 0, 0, 1) 80%,
+    rgba(0, 0, 0, 0)
+  );
+}
+
+.custom-select option {
+  background-color: #0a0b20;
+  color: white;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-linea/50 rounded-full hover:bg-linea/80;
+}
+
+.lty-playbtn {
+  background-image: linear-gradient(to right, theme('colors.azul-gradient'), theme('colors.morado-gradient')) !important;
+  background-color: transparent !important;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  @apply w-[6px];
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-image: linear-gradient(to bottom, theme('colors.azul-gradient'), theme('colors.morado-gradient'));
+  @apply rounded-full;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  filter: brightness(1.2);
+}
+
+/*Animaciones y estilos para Metodos de Generacion*/
+  @keyframes fadeDown {
+    0% { transform: translateY(0); }
+    50% { transform: translateY(5px); }
+    100% { transform: translateY(0); }
+  }
+  @keyframes fadeRight {
+    0% { transform: translateX(0); }
+    50% { transform: translateX(5px); }
+    100% { transform: translateX(0); }
+  }
+  .animate-fade-down {
+    animation: fadeDown 1.5s infinite ease-in-out;
+  }
+  .animate-fade-right {
+    animation: fadeRight 1.5s infinite ease-in-out;
+  }
+  .group:hover .input-output-image {
+    transform: scale(1.05);
+    filter: brightness(1.1);
+  }
