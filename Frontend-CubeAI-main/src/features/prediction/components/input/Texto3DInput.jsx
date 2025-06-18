@@ -43,39 +43,83 @@ export const Texto3DInput = ({ isCollapsed }) => {
     submitPrediction,
     clearError: clearPredictionError,
     setError: setPredictionError,
+  const {
+    isLoading: isSubmitting, // Renamed for clarity: initial submission loading
+    error: submissionError, // Renamed for clarity: error from initial submission
+    loadingSteps,
+    submitPrediction,
+    clearError: clearSubmissionError, // Renamed
+    setError: setSubmissionError,   // Renamed
+    taskId,
+    taskStatus,
+    taskData,
+    resetTaskState,
   } = usePredictionHandler(user);
 
-  const resetComponentState = useCallback(() => {
+  const resetComponentState = useCallback((clearTask = false) => {
     setGenerationName("");
     setUserPrompt("");
     setSelectedStyle(null);
-    clearPredictionError();
+    clearSubmissionError();
     clearResult('text3d');
-  }, [clearPredictionError, clearResult]);
+    if (clearTask) {
+      resetTaskState();
+    }
+  }, [clearSubmissionError, clearResult, resetTaskState]);
 
   useEffect(() => {
+    // Cleanup on unmount
     return () => {
-      resetComponentState();
+      resetComponentState(true); // Clear everything including task state
     };
   }, [resetComponentState]);
 
+  // Effect to handle updates from task polling
+  useEffect(() => {
+    if (taskStatus === "SUCCESS" && taskData) {
+      // Assuming taskData is the complete prediction result object expected by the context
+      // The backend for /generation_status/<task_id> should return { status: "SUCCESS", result: { ...prediction_data... } }
+      // And usePredictionHandler stores this `result` object (the content of the `result` field) into `taskData`.
+      // Let's adjust based on what usePredictionHandler actually stores in taskData.
+      // The hook stores `result.data` into `taskData`. If `result.data` from API is `{ actual_prediction_payload }`, then this is fine.
+      // If `result.data` is `{ status: "SUCCESS", result: { actual_prediction_payload } }`, then we need `taskData.result`.
+      // Based on current usePredictionHandler: `if(result.data) setTaskData(result.data);`
+      // And prompt: "taskResult.result", let's assume taskData *is* the result field.
+      // This means getTaskStatus in predictionApi.jsx should return response.data.result if the actual payload is nested.
+      // For now, let's assume taskData IS the object that needs to be dispatched.
+      // This might need adjustment if the structure is different.
+      // If `taskData` directly contains { generationName, url, ... }, this is correct:
+      dispatch({ type: 'SET_PREDICTION', payload: { type: 'text3d', result: taskData } });
+      clearSubmissionError(); // Clear any previous errors
+    } else if (taskStatus === "FAILURE") {
+      // Error is already set by usePredictionHandler's polling logic.
+      // We might want to clear any displayed result in the context if a poll fails.
+      clearResult('text3d');
+    }
+  }, [taskStatus, taskData, dispatch, clearResult, clearSubmissionError]);
+
+
   const handleLocalPrediction = async () => {
     if (!generationName.trim() || !userPrompt.trim() || !selectedStyle) {
-      setPredictionError("Todos los campos (Nombre, Prompt, Estilo) son obligatorios");
+      setSubmissionError(t("generation_pages.common.error_all_fields_required"));
       return;
     }
+    // Clear previous results and errors before starting a new prediction
+    resetComponentState(true); // true to also reset task states
     
-    dispatch({ type: 'SET_PREDICTION', payload: { type: 'text3d', result: null } });
+    // No need to dispatch null here, submitPrediction will lead to task status changes
+    // dispatch({ type: 'SET_PREDICTION', payload: { type: 'text3d', result: null } });
 
-    const result = await submitPrediction("texto3D", {
-      generationName,
+    // submitPrediction now handles setting isLoading (isSubmitting) and error (submissionError)
+    // It also sets up taskId and taskStatus for polling.
+    await submitPrediction("texto3D", {
+      generationNameFromInput: generationName, // Pass input name explicitly if needed by backend
       prompt: userPrompt,
       selectedStyle,
+      // The backend's initial /texto3D response should include generationName if it's created there
+      // For now, assuming the hook or subsequent status calls will provide it if needed by taskData.
     });
-    
-    if (result) {
-      dispatch({ type: 'SET_PREDICTION', payload: { type: 'text3d', result } });
-    }
+    // No need to dispatch result here, polling effect will handle it.
   };
 
   const handlePreviewUpload = useCallback(async (dataURL) => {
@@ -98,11 +142,25 @@ export const Texto3DInput = ({ isCollapsed }) => {
     }
   }, [user, prediction_text3d_result]);
 
-  const isButtonDisabled =
-    predictionLoading ||
+  const isGenerateButtonDisabled =
+    isSubmitting ||
+    (taskId && (taskStatus === "PENDING" || taskStatus === "PROCESSING")) ||
     !generationName.trim() ||
     !userPrompt.trim() ||
     !selectedStyle;
+
+  const showPollingStatus = taskId && (taskStatus === "PENDING" || taskStatus === "PROCESSING");
+  const showSuccessUI = taskStatus === "SUCCESS";
+  const showFailureUI = taskStatus === "FAILURE" && submissionError; // submissionError will contain the error message
+
+  const handleStartNewGeneration = () => {
+    resetComponentState(true); // true to reset task state as well
+  };
+
+  const handleTryAgain = () => {
+    // Reset component state and task state to allow a fresh submission
+    resetComponentState(true);
+  };
 
   return (
     <section
@@ -140,7 +198,7 @@ export const Texto3DInput = ({ isCollapsed }) => {
                   placeholder={t("generation_pages.common.name_placeholder_generic")}
                   value={generationName}
                   onChange={(e) => setGenerationName(e.target.value)}
-                  disabled={predictionLoading}
+                  disabled={isSubmitting || !!taskId} // Disable if submitting or task is active
                   className={`w-full p-2 rounded-lg bg-white dark:bg-principal/50 border-2 text-gray-800 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-azul-gradient/50 focus:border-azul-gradient transition-all duration-300 ${
                     generationName.trim()
                       ? "border-azul-gradient"
@@ -160,7 +218,7 @@ export const Texto3DInput = ({ isCollapsed }) => {
                   placeholder={t("generation_pages.common.prompt_placeholder_generic")}
                   value={userPrompt}
                   onChange={(e) => setUserPrompt(e.target.value)}
-                  disabled={predictionLoading}
+                  disabled={isSubmitting || !!taskId} // Disable if submitting or task is active
                   className={`w-full p-2 rounded-lg bg-white dark:bg-principal/50 border-2 text-gray-800 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-azul-gradient/50 focus:border-azul-gradient transition-all duration-300 min-h-[80px] flex-grow resize-none ${
                     userPrompt.trim()
                       ? "border-azul-gradient"
@@ -182,7 +240,7 @@ export const Texto3DInput = ({ isCollapsed }) => {
                     <button
                       key={style.value}
                       onClick={() => setSelectedStyle(style.value)}
-                      disabled={predictionLoading}
+                      disabled={isSubmitting || !!taskId} // Disable if submitting or task is active
                       className={`border-2 rounded-lg py-2 px-2 flex items-center justify-center transition-all text-xs h-10 ${
                         selectedStyle === style.value
                           ? "border-azul-gradient bg-azul-gradient/10 dark:bg-azul-gradient/20 shadow-md scale-105 font-semibold ring-2 ring-azul-gradient/50 text-gray-800 dark:text-white"
@@ -198,7 +256,7 @@ export const Texto3DInput = ({ isCollapsed }) => {
                     <button
                       key={style.value}
                       onClick={() => setSelectedStyle(style.value)}
-                      disabled={predictionLoading}
+                      disabled={isSubmitting || !!taskId} // Disable if submitting or task is active
                       className={`border-2 rounded-lg py-2 px-2 flex items-center justify-center transition-all text-xs h-10 ${
                         selectedStyle === style.value
                           ? "border-azul-gradient bg-azul-gradient/10 dark:bg-azul-gradient/20 shadow-md scale-105 font-semibold ring-2 ring-azul-gradient/50 text-gray-800 dark:text-white"
@@ -211,21 +269,82 @@ export const Texto3DInput = ({ isCollapsed }) => {
                 </div>
               </div>
 
-              <div className="mt-auto flex-shrink-0">
-                <button
-                  onClick={handleLocalPrediction}
-                  disabled={isButtonDisabled}
-                  className="w-full text-base font-semibold bg-gradient-to-r from-azul-gradient to-morado-gradient py-2.5 rounded-lg border-none flex items-center justify-center gap-2 transition-all duration-300 hover:shadow-lg hover:shadow-morado-gradient/20 hover:scale-105 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed text-white"
-                >
-                  <Sparkle size={22} weight="fill" />
-                  {t("generation_pages.common.generate_button")}
-                </button>
+              {/* Generate Button and Status Display Area */}
+              <div className="mt-auto flex-shrink-0 space-y-2">
+                {!showSuccessUI && !showFailureUI && (
+                  <button
+                    onClick={handleLocalPrediction}
+                    disabled={isGenerateButtonDisabled}
+                    className="w-full text-base font-semibold bg-gradient-to-r from-azul-gradient to-morado-gradient py-2.5 rounded-lg border-none flex items-center justify-center gap-2 transition-all duration-300 hover:shadow-lg hover:shadow-morado-gradient/20 hover:scale-105 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed text-white"
+                  >
+                    <Sparkle size={22} weight="fill" />
+                    {t("generation_pages.common.generate_button")}
+                  </button>
+                )}
+
+                {showPollingStatus && (
+                  <div className="text-center p-2 bg-blue-500/10 dark:bg-blue-400/20 rounded-lg text-sm text-blue-700 dark:text-blue-300">
+                    {t("generation_pages.common.status_generating")} (Status: {taskStatus}) {t("generation_pages.common.please_wait")}
+                  </div>
+                )}
+
+                {showSuccessUI && (
+                  <div className="text-center p-3 bg-green-500/10 dark:bg-green-400/20 rounded-lg text-sm text-green-700 dark:text-green-300 space-y-2">
+                    <p className="font-semibold">{t("generation_pages.common.status_success_message")}</p>
+                    {taskData ? (
+                      <>
+                        {taskData.generation_name && (
+                          <p><strong>{t("generation_pages.common.generation_name_label")}:</strong> {taskData.generation_name}</p>
+                        )}
+                        {taskData.preview_image_url && (
+                          <div className="flex justify-center my-2">
+                            <img
+                              src={taskData.preview_image_url}
+                              alt={t("generation_pages.common.preview_alt_text")}
+                              className="max-w-full h-auto max-h-48 rounded-md border border-green-300 dark:border-green-600 shadow-sm"
+                            />
+                          </div>
+                        )}
+                        {taskData.model_url ? (
+                          <a
+                            href={taskData.model_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded my-1 transition-colors duration-150"
+                          >
+                            {taskData.model_url.startsWith('gs://')
+                              ? t("generation_pages.common.view_model_gs_link")
+                              : t("generation_pages.common.view_3d_model_button")}
+                          </a>
+                        ) : (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{t("generation_pages.common.model_url_not_found")}</p>
+                        )}
+                         {taskData.model_url && taskData.model_url.startsWith('gs://') && (
+                           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">({taskData.model_url})</p>
+                         )}
+                      </>
+                    ) : (
+                      <p>{t("generation_pages.common.no_details_available")}</p>
+                    )}
+                  </div>
+                )}
+                 {/* Error for task failure is handled by ErrorModal via submissionError state */}
+
+                {(showSuccessUI || showFailureUI) && (
+                  <button
+                    onClick={showSuccessUI ? handleStartNewGeneration : handleTryAgain}
+                    className="w-full text-base font-semibold bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 py-2.5 rounded-lg border-none flex items-center justify-center gap-2 transition-all duration-300 text-gray-800 dark:text-white"
+                  >
+                    {showSuccessUI ? t("generation_pages.common.button_new_generation") : t("generation_pages.common.button_try_again")}
+                  </button>
+                )}
               </div>
             </div>
           </div>
           {/* --- Columna del Resultado --- */}
           <div className="xl:col-span-3 flex-grow min-h-0">
             <div className="h-full min-h-[400px] sm:min-h-[500px] md:min-h-[600px] xl:min-h-0 border-2 border-gray-200 dark:border-linea/20 rounded-3xl overflow-hidden">
+              {/* Texto3DResult will display based on prediction_text3d_result from context, which is updated by the useEffect */}
               <Texto3DResult onFirstLoad={handlePreviewUpload} />
             </div>
           </div>
@@ -233,12 +352,12 @@ export const Texto3DInput = ({ isCollapsed }) => {
       </div>
 
       <ErrorModal
-        showModal={!!predictionError}
-        closeModal={clearPredictionError}
-        errorMessage={predictionError || ""}
+        showModal={!!submissionError && taskStatus !== "SUCCESS"} // Show if there's an error and task isn't successful
+        closeModal={clearSubmissionError} // Or handleTryAgain if it should also clear errors
+        errorMessage={submissionError || ""}
       />
       <LoadingModal
-        showLoadingModal={predictionLoading}
+        showLoadingModal={isSubmitting && !taskId} // Only show for initial submit before taskId is known
         steps={loadingSteps}
       />
     </section>
