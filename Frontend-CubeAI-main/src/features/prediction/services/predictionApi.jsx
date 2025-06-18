@@ -136,3 +136,16 @@ export const uploadPredictionPreview = async (token, formData) => {
     handleApiError(error, "Error al subir la previsualización de la generación");
   }
 };
+
+export const getTaskStatus = async (token, taskId) => {
+  try {
+    const response = await axios.get(`${BASE_URL}/generation_status/${taskId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data; // Contains task status information
+  } catch (error) {
+    handleApiError(error, "Error al obtener el estado de la tarea");
+  }
+};

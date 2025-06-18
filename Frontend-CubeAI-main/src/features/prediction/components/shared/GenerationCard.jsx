@@ -27,13 +27,16 @@ const DownloadButton = ({ download }) => {
 
 export const GenerationCard = ({ generation, formatDate, openModal, open3DViewer }) => {
   const { t } = useTranslation();
-  const { previewImageUrl, downloads } = generation;
+  // Assuming 'error_message' might be the field name for errors. Adapt if different.
+  const { previewImageUrl, downloads, status, error_message, modelUrl } = generation;
 
   const handleCardClick = () => {
-    if (generation.modelUrl) {
+    if (modelUrl) {
       open3DViewer(generation);
     }
   };
+
+  const isGsUrl = (url) => url && url.startsWith('gs://');
 
   return (
     <div 
@@ -42,7 +45,7 @@ export const GenerationCard = ({ generation, formatDate, openModal, open3DViewer
                  bg-gray-200 dark:bg-principal 
                  border-2 border-transparent hover:border-morado-gradient transition-all duration-300"
     >
-      {previewImageUrl ? (
+      {previewImageUrl && !isGsUrl(previewImageUrl) ? (
         <img 
           src={previewImageUrl} 
           alt={`Previsualización de ${generation.generation_name}`}
@@ -50,24 +53,49 @@ export const GenerationCard = ({ generation, formatDate, openModal, open3DViewer
           loading="lazy"
         />
       ) : (
-        // ✅ Vista para cuando no hay previsualización, adaptada a ambos temas
         <div className="w-full h-full flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-400 p-4 text-center">
             <Cube size={40} className="mb-2 opacity-50"/>
-            <span className="text-sm font-medium">{t('visualizer_page.card.preview_unavailable')}</span>
-            <span className="text-xs opacity-70 mt-1">{t('visualizer_page.card.click_to_view')}</span>
+            {isGsUrl(previewImageUrl) ? (
+                 <span className="text-xs opacity-70 mt-1">{t('visualizer_page.card.preview_gs_url', 'Preview not directly viewable (GS URL)')}</span>
+            ) : (
+                 <span className="text-sm font-medium">{t('visualizer_page.card.preview_unavailable', 'Preview Unavailable')}</span>
+            )}
+            {modelUrl && <span className="text-xs opacity-70 mt-1">{t('visualizer_page.card.click_to_view', 'Click to view details')}</span>}
         </div>
       )}
       
-      {/* ✅ La superposición oscura se mantiene en ambos temas para asegurar la legibilidad del texto */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent transition-opacity duration-300"></div>
 
       <div className="absolute inset-0 flex flex-col justify-end p-3 text-white">
-        <h3 className="text-base font-bold truncate drop-shadow-md">{generation.generation_name}</h3>
+        <h3 className="text-base font-bold truncate drop-shadow-md" title={generation.generation_name}>{generation.generation_name}</h3>
+
+        {status && (
+          <p className={`text-xs drop-shadow-sm font-semibold ${
+            status === 'FAILURE' ? 'text-red-400' : status === 'SUCCESS' ? 'text-green-400' : 'text-gray-300'
+          }`}>
+            {t('visualizer_page.card.status_label', 'Status')}:{' '}
+            {status === 'FAILURE' ? t('visualizer_page.card.status_failed', 'Failed') :
+             status === 'SUCCESS' ? t('visualizer_page.card.status_completed', 'Completed') :
+             status}
+          </p>
+        )}
+
+        {status === 'FAILURE' && error_message && (
+          <p className="text-xs text-red-300 truncate drop-shadow-sm" title={error_message}>
+            {t('visualizer_page.card.error_label', 'Error')}: {error_message}
+          </p>
+        )}
+
+        {modelUrl && isGsUrl(modelUrl) && (
+            <p className="text-xs text-amber-400 drop-shadow-sm truncate" title={modelUrl}>
+                {t('visualizer_page.card.model_gs_url_notice', 'Model at GS Path (may not open directly)')}
+            </p>
+        )}
+
         <p className="text-xs text-gray-300 mb-2 drop-shadow-sm">
           {formatDate(generation.timestamp)}
         </p>
 
-        {/* ✅ Los botones ya usan gradientes y colores que funcionan bien, no necesitan cambios */}
         <div className="flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
           <div className="flex gap-2">
             {downloads && downloads.map(d => (

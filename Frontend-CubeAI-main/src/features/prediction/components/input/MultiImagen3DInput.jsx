@@ -48,43 +48,56 @@ export const MultiImagen3DInput = ({ isCollapsed }) => {
   } = useMultiImageUpload();
 
   const {
-    isLoading: predictionLoading,
-    error: predictionError,
+    isSubmitting,
+    submissionError,
     loadingSteps,
     submitPrediction,
-    clearError: clearPredictionError,
-    setError: setPredictionError,
+    clearSubmissionError,
+    setSubmissionError,
+    taskId,
+    taskStatus,
+    taskData,
+    resetTaskState,
   } = usePredictionHandler(user);
 
-  const resetComponentState = useCallback(() => {
+  const resetComponentState = useCallback((clearTask = false) => {
     setGenerationName("");
     resetMultiImageState();
-    clearPredictionError();
+    clearSubmissionError();
     clearResult("multiimg3d");
-  }, [resetMultiImageState, clearPredictionError, clearResult]);
+    if (clearTask) {
+      resetTaskState();
+    }
+  }, [resetMultiImageState, clearSubmissionError, clearResult, resetTaskState]);
 
   useEffect(() => {
+    // Cleanup on unmount
     return () => {
-      resetComponentState();
+      resetComponentState(true);
     };
   }, [resetComponentState]);
 
+  // Effect to handle updates from task polling
+  useEffect(() => {
+    if (taskStatus === "SUCCESS" && taskData) {
+      dispatch({ type: 'SET_PREDICTION', payload: { type: 'multiimg3d', result: taskData } });
+      clearSubmissionError();
+    } else if (taskStatus === "FAILURE") {
+      clearResult('multiimg3d');
+    }
+  }, [taskStatus, taskData, dispatch, clearResult, clearSubmissionError]);
+
   const handleLocalPrediction = async () => {
     if (!imageFiles.frontal || !imageFiles.lateral || !imageFiles.trasera) {
-      setPredictionError(
-        "Por favor, cargue las tres imágenes (frontal, lateral y trasera)."
-      );
+      setSubmissionError(t("generation_pages.multi_image_to_3d.error_all_images_required") || "Por favor, cargue las tres imágenes (frontal, lateral y trasera).");
       return;
     }
     if (!generationName.trim()) {
-      setPredictionError("Por favor, ingrese un nombre para la generación.");
+      setSubmissionError(t("generation_pages.common.error_name_required") || "Por favor, ingrese un nombre para la generación.");
       return;
     }
 
-    dispatch({
-      type: "SET_PREDICTION",
-      payload: { type: "multiimg3d", result: null },
-    });
+    resetComponentState(true); // Clear previous states and task
 
     const formData = new FormData();
     formData.append("frontal", imageFiles.frontal);
@@ -92,13 +105,8 @@ export const MultiImagen3DInput = ({ isCollapsed }) => {
     formData.append("trasera", imageFiles.trasera);
     formData.append("generationName", generationName);
 
-    const result = await submitPrediction("multiimagen3D", formData);
-    if (result) {
-      dispatch({
-        type: "SET_PREDICTION",
-        payload: { type: "multiimg3d", result },
-      });
-    }
+    await submitPrediction("multiimagen3D", formData);
+    // Result dispatching is handled by the useEffect listening to taskStatus and taskData
   };
 
   const handlePreviewUpload = useCallback(
@@ -134,12 +142,26 @@ export const MultiImagen3DInput = ({ isCollapsed }) => {
     [user, prediction_multiimg3d_result]
   );
 
+  const isUIBlocked = isSubmitting || (taskId && (taskStatus === "PENDING" || taskStatus === "PROCESSING"));
+
   const isButtonDisabled =
-    predictionLoading ||
+    isUIBlocked ||
     !generationName.trim() ||
     !imageFiles.frontal ||
     !imageFiles.lateral ||
     !imageFiles.trasera;
+
+  const showPollingStatus = taskId && (taskStatus === "PENDING" || taskStatus === "PROCESSING");
+  const showSuccessUI = taskStatus === "SUCCESS";
+  const showFailureUI = taskStatus === "FAILURE" && submissionError;
+
+  const handleStartNewGeneration = () => {
+    resetComponentState(true);
+  };
+
+  const handleTryAgain = () => {
+    resetComponentState(true);
+  };
 
   return (
     <section
@@ -148,6 +170,7 @@ export const MultiImagen3DInput = ({ isCollapsed }) => {
       }`}
     >
       <div className="relative z-10 px-4 sm:px-6 md:px-8 pt-6 pb-8 flex flex-col flex-grow">
+        {/* Header */}
         <div className="mb-6 flex-shrink-0">
           <div className="flex items-center gap-4">
             <div>
@@ -173,20 +196,17 @@ export const MultiImagen3DInput = ({ isCollapsed }) => {
                 </div>
                 <input
                   type="text"
-                  placeholder={t(
-                    "generation_pages.common.name_placeholder_generic"
-                  )}
+                  placeholder={t("generation_pages.common.name_placeholder_generic")}
                   value={generationName}
                   onChange={(e) => setGenerationName(e.target.value)}
-                  disabled={predictionLoading}
+                  disabled={isUIBlocked}
                   className={`w-full p-2.5 rounded-lg bg-white dark:bg-principal/50 border-2 text-gray-800 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-azul-gradient/50 focus:border-azul-gradient transition-all duration-300 ${
-                    generationName.trim()
-                      ? "border-azul-gradient"
-                      : "border-gray-300 dark:border-linea/30"
+                    generationName.trim() ? "border-azul-gradient" : "border-gray-300 dark:border-linea/30"
                   }`}
                 />
               </div>
 
+              {/* Multi Image Upload Area */}
               <div className="flex-grow flex flex-col min-h-0">
                 <div className="flex items-center gap-3 mb-2">
                   <UploadSimple size={18} className="text-azul-gradient" />
@@ -194,108 +214,125 @@ export const MultiImagen3DInput = ({ isCollapsed }) => {
                     {t("generation_pages.common.upload_views_label")}
                   </h3>
                 </div>
-
+                {/* Image Type Buttons */}
                 <div className="flex gap-2 mb-2">
                   {["frontal", "lateral", "trasera"].map((type, index) => (
                     <button
                       key={type}
-                      onClick={() =>
-                        !predictionLoading && selectImageType(type)
-                      }
-                      disabled={predictionLoading}
+                      onClick={() => !isUIBlocked && selectImageType(type)}
+                      disabled={isUIBlocked}
                       className={`flex-1 border-2 rounded-lg py-1.5 px-2 flex items-center justify-center transition-all text-xs h-10 gap-1.5 
-                      ${
-                        currentImageType === type
-                          ? "border-azul-gradient bg-azul-gradient/10 dark:bg-azul-gradient/20 shadow-md font-semibold text-gray-800 dark:text-white"
-                          : "border-gray-300 dark:border-linea/30 hover:border-azul-gradient/50 bg-white dark:bg-principal/50 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-                      }`}
+                      ${currentImageType === type ? "border-azul-gradient bg-azul-gradient/10 dark:bg-azul-gradient/20 shadow-md font-semibold text-gray-800 dark:text-white" : "border-gray-300 dark:border-linea/30 hover:border-azul-gradient/50 bg-white dark:bg-principal/50 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"}`}
                     >
-                      <span className="capitalize">
-                        {t(`methods.multi_image_to_3d.views.${index}`)}
-                      </span>
-                      {imageFiles[type] && (
-                        <CheckCircle
-                          size={14}
-                          weight="fill"
-                          className="text-green-400"
-                        />
-                      )}
+                      <span className="capitalize">{t(`methods.multi_image_to_3d.views.${index}`)}</span>
+                      {imageFiles[type] && <CheckCircle size={14} weight="fill" className="text-green-400" />}
                     </button>
                   ))}
                 </div>
-
+                {/* Dropzone */}
                 <div
                   className={`relative border-2 border-dashed rounded-lg p-2 text-center cursor-pointer transition-colors flex flex-col items-center justify-center flex-grow 
-                  ${
-                    isDragging
-                      ? "border-azul-gradient bg-azul-gradient/5"
-                      : imagePreviews[currentImageType]
-                        ? "border-azul-gradient bg-azul-gradient/5"
-                        : "border-gray-300 dark:border-linea/30"
-                  } 
-                  ${
-                    predictionLoading
-                      ? "opacity-50 cursor-not-allowed"
-                      : "hover:border-azul-gradient/50"
-                  }`}
+                  ${isDragging ? "border-azul-gradient bg-azul-gradient/5" : imagePreviews[currentImageType] ? "border-azul-gradient bg-azul-gradient/5" : "border-gray-300 dark:border-linea/30"}
+                  ${isUIBlocked ? "opacity-50 cursor-not-allowed" : "hover:border-azul-gradient/50"}`}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  onClick={() =>
-                    !predictionLoading &&
-                    document.getElementById("fileInput-multiimagen3d").click()
-                  }
+                  onDrop={isUIBlocked ? undefined : handleDrop}
+                  onClick={() => !isUIBlocked && document.getElementById("fileInput-multiimagen3d").click()}
                 >
                   <input
                     id="fileInput-multiimagen3d"
                     type="file"
                     accept="image/*"
                     onChange={handleFileChange}
-                    disabled={predictionLoading}
+                    disabled={isUIBlocked}
                     className="hidden"
                   />
                   {imagePreviews[currentImageType] ? (
                     <div className="w-full h-full relative min-h-[200px] sm:min-h-[220px] xl:min-h-0 p-1">
-                      <img
-                        src={imagePreviews[currentImageType]}
-                        alt={`Vista previa (${currentImageType})`}
-                        className="absolute inset-0 w-full h-full object-contain rounded-lg"
-                      />
+                      <img src={imagePreviews[currentImageType]} alt={`Vista previa (${currentImageType})`} className="absolute inset-0 w-full h-full object-contain rounded-lg" />
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center p-4 min-h-[200px] sm:min-h-[220px] xl:min-h-0">
-                      <UploadSimple
-                        className="w-10 h-10 text-gray-400 mb-3"
-                        weight="light"
-                      />
+                      <UploadSimple className="w-10 h-10 text-gray-400 mb-3" weight="light" />
                       <p className="text-sm text-gray-500 dark:text-gray-300 capitalize">
                         {t("generation_pages.common.drag_and_drop_views")}{" "}
-                        <strong className="text-gray-700 dark:text-white">
-                          {t(
-                            `methods.multi_image_to_3d.views.${["frontal", "lateral", "trasera"].indexOf(currentImageType)}`
-                          )}
-                        </strong>
+                        <strong className="text-gray-700 dark:text-white">{t(`methods.multi_image_to_3d.views.${["frontal", "lateral", "trasera"].indexOf(currentImageType)}`)}</strong>
                       </p>
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
-                        {t("generation_pages.common.file_types")}
-                      </p>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">{t("generation_pages.common.file_types")}</p>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="mt-auto flex-shrink-0">
-                <button
-                  onClick={handleLocalPrediction}
-                  disabled={isButtonDisabled}
-                  className="w-full text-base font-semibold bg-gradient-to-r from-azul-gradient to-morado-gradient py-3 rounded-lg border-none flex items-center justify-center gap-2 transition-all duration-300 hover:shadow-lg hover:shadow-morado-gradient/20 hover:scale-105 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed text-white"
-                >
-                  <Sparkle size={22} weight="fill" />
-                  {t("generation_pages.common.generate_button")}
-                </button>
+              {/* Generate Button and Status Display Area */}
+              <div className="mt-auto flex-shrink-0 space-y-2">
+                {!showSuccessUI && !showFailureUI && (
+                  <button
+                    onClick={handleLocalPrediction}
+                    disabled={isButtonDisabled}
+                    className="w-full text-base font-semibold bg-gradient-to-r from-azul-gradient to-morado-gradient py-3 rounded-lg border-none flex items-center justify-center gap-2 transition-all duration-300 hover:shadow-lg hover:shadow-morado-gradient/20 hover:scale-105 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed text-white"
+                  >
+                    <Sparkle size={22} weight="fill" />
+                    {t("generation_pages.common.generate_button")}
+                  </button>
+                )}
+                {showPollingStatus && (
+                  <div className="text-center p-2 bg-blue-500/10 dark:bg-blue-400/20 rounded-lg text-sm text-blue-700 dark:text-blue-300">
+                    {t("generation_pages.common.status_generating")} (Status: {taskStatus}) {t("generation_pages.common.please_wait")}
+                  </div>
+                )}
+                {showSuccessUI && (
+                  <div className="text-center p-3 bg-green-500/10 dark:bg-green-400/20 rounded-lg text-sm text-green-700 dark:text-green-300 space-y-2">
+                    <p className="font-semibold">{t("generation_pages.common.status_success_message")}</p>
+                    {taskData ? (
+                      <>
+                        {taskData.generation_name && (
+                          <p><strong>{t("generation_pages.common.generation_name_label")}:</strong> {taskData.generation_name}</p>
+                        )}
+                        {taskData.preview_image_url && (
+                          <div className="flex justify-center my-2">
+                            <img
+                              src={taskData.preview_image_url}
+                              alt={t("generation_pages.common.preview_alt_text")}
+                              className="max-w-full h-auto max-h-48 rounded-md border border-green-300 dark:border-green-600 shadow-sm"
+                            />
+                          </div>
+                        )}
+                        {taskData.model_url ? (
+                          <a
+                            href={taskData.model_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded my-1 transition-colors duration-150"
+                          >
+                            {taskData.model_url.startsWith('gs://')
+                              ? t("generation_pages.common.view_model_gs_link")
+                              : t("generation_pages.common.view_3d_model_button")}
+                          </a>
+                        ) : (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{t("generation_pages.common.model_url_not_found")}</p>
+                        )}
+                        {taskData.model_url && taskData.model_url.startsWith('gs://') && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">({taskData.model_url})</p>
+                        )}
+                      </>
+                    ) : (
+                      <p>{t("generation_pages.common.no_details_available")}</p>
+                    )}
+                  </div>
+                )}
+                {(showSuccessUI || showFailureUI) && (
+                  <button
+                    onClick={showSuccessUI ? handleStartNewGeneration : handleTryAgain}
+                    className="w-full text-base font-semibold bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 py-2.5 rounded-lg border-none flex items-center justify-center gap-2 transition-all duration-300 text-gray-800 dark:text-white"
+                  >
+                    {showSuccessUI ? t("generation_pages.common.button_new_generation") : t("generation_pages.common.button_try_again")}
+                  </button>
+                )}
               </div>
             </div>
           </div>
+          {/* Result Column */}
           <div className="xl:col-span-3 flex-grow">
             <div className="h-full min-h-[400px] sm:min-h-[500px] md:min-h-[600px] xl:min-h-0 border-2 border-gray-200 dark:border-linea/20 rounded-3xl overflow-hidden">
               <MultiImagen3DResult onFirstLoad={handlePreviewUpload} />
@@ -305,11 +342,11 @@ export const MultiImagen3DInput = ({ isCollapsed }) => {
       </div>
 
       <ErrorModal
-        showModal={!!predictionError}
-        closeModal={clearPredictionError}
-        errorMessage={predictionError || ""}
+        showModal={!!submissionError && taskStatus !== "SUCCESS"}
+        closeModal={clearSubmissionError}
+        errorMessage={submissionError || ""}
       />
-      <LoadingModal showLoadingModal={predictionLoading} steps={loadingSteps} />
+      <LoadingModal showLoadingModal={isSubmitting && !taskId} steps={loadingSteps} />
     </section>
   );
 };
